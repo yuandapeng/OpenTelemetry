@@ -1,0 +1,23 @@
+{
+  "name": "opentelemetry-demo",
+  "version": "1.0.0",
+  "description": "OpenTelemetry分布式追踪示例",
+  "private": true,
+  "workspaces": [
+    "services/*",
+    "frontend"
+  ],
+  "scripts": {
+    "install:all": "npm install && npm run install:services && npm run install:frontend",
+    "install:services": "cd services/service-a && npm install && cd ../service-b && npm install",
+    "install:frontend": "cd frontend && npm install",
+    "dev:service-a": "cd services/service-a && npm run dev",
+    "dev:service-b": "cd services/service-b && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev": "concurrently \"npm run dev:service-a\" \"npm run dev:service-b\" \"npm run dev:frontend\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
+

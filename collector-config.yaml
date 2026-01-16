@@ -1,0 +1,73 @@
+# OpenTelemetry Collector 配置文件
+# 这个文件定义了 Collector 如何接收、处理和导出数据
+
+receivers:
+  # OTLP 接收器 - 接收来自应用程序的数据
+  otlp:
+    protocols:
+      # gRPC 协议 - 默认端口 4317
+      grpc:
+        endpoint: 0.0.0.0:4317
+      
+      # HTTP 协议 - 默认端口 4318 (这就是你问的 4318!)
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # 批量处理 - 提高性能
+  batch:
+  
+  # 添加关联Tag - 让 Traces、Logs、Metrics 可以关联
+  attributes:
+    actions:
+      # 确保所有数据都有 traceId 和 spanId
+      - key: trace.trace_id
+        from_attribute: trace_id
+        action: insert
+      - key: trace.span_id
+        from_attribute: span_id
+        action: insert
+
+exporters:
+  # 导出 Traces 到 Jaeger (使用 OTLP gRPC)
+  # Jaeger all-in-one 默认启用 OTLP，使用 gRPC 更高效
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+  
+  # 导出 Logs 到 Loki - 标准方案：使用 OTLP HTTP
+  # Loki 3.0+ 原生支持 OTLP/HTTP 协议
+  otlphttp:
+    endpoint: http://loki:3100/otlp
+    tls:
+      insecure: true
+  
+  # 导出 Metrics 到 Prometheus
+  # Prometheus exporter 会暴露一个 HTTP 端点供 Prometheus/Grafana 拉取
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+    const_labels:
+      collector: "otel-collector"
+
+service:
+  pipelines:
+    # Traces 处理管道
+    traces:
+      receivers: [otlp]
+      processors: [batch, attributes]
+      exporters: [otlp/jaeger]
+    
+    # Logs 处理管道 - 启用日志收集
+    # 标准方案：使用 OTLP HTTP 直接发送到 Loki
+    logs:
+      receivers: [otlp]
+      processors: [batch, attributes]
+      exporters: [otlphttp]
+    
+    # Metrics 处理管道
+    metrics:
+      receivers: [otlp]
+      processors: [batch, attributes]
+      exporters: [prometheus]
+

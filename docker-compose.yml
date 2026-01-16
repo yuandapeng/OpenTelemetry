@@ -1,0 +1,94 @@
+version: '3.8'
+
+services:
+  # OpenTelemetry Collector - 统一接收 Traces、Metrics、Logs
+  # 使用 contrib 版本，包含更多 exporter（包括 Jaeger、Loki）
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: otel-collector
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "4317:4317"  # OTLP gRPC 接收端口
+      - "4318:4318"  # OTLP HTTP 接收端口
+      - "8889:8889"  # Prometheus metrics 端点
+    depends_on:
+      - jaeger
+      - loki
+    networks:
+      - otel-network
+    restart: unless-stopped
+
+  # Jaeger - Traces 可视化
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: jaeger
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "14268:14268"  # Jaeger HTTP collector
+      - "14250:14250"  # Jaeger gRPC collector
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    networks:
+      - otel-network
+    restart: unless-stopped
+
+  # Loki - Logs 存储
+  loki:
+    image: grafana/loki:latest
+    container_name: loki
+    ports:
+      - "3100:3100"  # Loki API
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - otel-network
+    restart: unless-stopped
+
+  # Prometheus - Metrics 存储和查询
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"  # Prometheus UI
+    volumes:
+      - ./prometheus-config.yaml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    depends_on:
+      - otel-collector
+    networks:
+      - otel-network
+    restart: unless-stopped
+
+  # Grafana - 统一可视化平台（Traces、Logs、Metrics）
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3003:3000"  # Grafana UI (避免与 service-a(3001) 和 service-b(3002) 端口冲突)
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+    volumes:
+      - grafana-storage:/var/lib/grafana
+    depends_on:
+      - loki
+      - jaeger
+      - prometheus
+    networks:
+      - otel-network
+    restart: unless-stopped
+
+networks:
+  otel-network:
+    driver: bridge
+
+volumes:
+  grafana-storage:
+  prometheus-data:
+
